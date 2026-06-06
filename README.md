@@ -1,4 +1,4 @@
-# CLAUDETranscribe
+# TestTranscribe
 
 Local audio transcription tool. Drop audio files in the browser, get timestamped transcripts back. Runs entirely on CPU — no GPU, no cloud, no data leaves the machine.
 
