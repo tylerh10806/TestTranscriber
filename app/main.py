@@ -1,6 +1,5 @@
 import asyncio
 import os
-import shutil
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
@@ -18,6 +17,8 @@ ALLOWED_EXTENSIONS = {
     ".mp3", ".mp4", ".wav", ".m4a", ".ogg", ".flac",
     ".webm", ".aac", ".opus", ".wma", ".mov",
 }
+MAX_JOBS = 25
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ async def transcribe_job(job_id: str) -> None:
         if proc.returncode != 0:
             raise RuntimeError("ffmpeg conversion failed")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, _do_transcribe, job_id, wav_path)
 
         job["result"] = result
@@ -124,11 +125,37 @@ async def transcribe(files: list[UploadFile] = File(...)):
         if ext not in ALLOWED_EXTENSIONS:
             continue
 
+        # Evict oldest completed job if at capacity
+        if len(job_store) >= MAX_JOBS:
+            evict_id = next(
+                (k for k, v in job_store.items() if v["status"] in ("done", "error")),
+                None,
+            )
+            if evict_id:
+                del job_store[evict_id]
+            else:
+                # All slots are active jobs — skip
+                continue
+
         job_id = str(uuid.uuid4())
         suffix = ext or ".audio"
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-        shutil.copyfileobj(file.file, tmp)
+        written = 0
+        too_large = False
+        while True:
+            chunk = await file.read(1024 * 1024)  # 1 MB chunks
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                too_large = True
+                break
+            tmp.write(chunk)
         tmp.close()
+
+        if too_large:
+            os.unlink(tmp.name)
+            raise HTTPException(status_code=413, detail=f"{file.filename}: exceeds 2 GB limit")
 
         job_store[job_id] = {
             "id": job_id,

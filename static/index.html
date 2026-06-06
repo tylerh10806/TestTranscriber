@@ -327,6 +327,7 @@
 <div class="toolbar">
   <span class="job-count" id="jobCount" aria-live="polite"></span>
   <div style="display:flex;gap:8px">
+    <button class="btn-ghost" id="clearDoneBtn" style="display:none" onclick="clearDone()">Clear done</button>
     <button class="btn-ghost" id="copyAllTsBtn" style="display:none" onclick="copyAllTimestamped()">Copy all w/ timestamps</button>
     <button class="btn-primary" id="copyAllBtn" style="display:none" onclick="copyAll()">Copy all</button>
   </div>
@@ -490,16 +491,24 @@
   async function copyTranscript(id) {
     const job = jobs.get(id);
     if (!job?.result?.transcript) return;
-    await navigator.clipboard.writeText(job.result.transcript);
-    showToast('Copied');
+    try {
+      await navigator.clipboard.writeText(job.result.transcript);
+      showToast('Copied');
+    } catch {
+      showToast('Copy failed — check clipboard permissions');
+    }
   }
 
   async function copyTimestamped(id) {
     const job = jobs.get(id);
     if (!job?.result?.segments?.length) return;
     const lines = job.result.segments.map(s => `[${fmtTime(s.start)} → ${fmtTime(s.end)}] ${s.text}`);
-    await navigator.clipboard.writeText(lines.join('\n'));
-    showToast('Copied with timestamps');
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      showToast('Copied with timestamps');
+    } catch {
+      showToast('Copy failed — check clipboard permissions');
+    }
   }
 
   async function copyAll() {
@@ -510,8 +519,12 @@
       }
     }
     if (!parts.length) return;
-    await navigator.clipboard.writeText(parts.join('\n\n'));
-    showToast(`Copied ${parts.length} transcript${parts.length !== 1 ? 's' : ''}`);
+    try {
+      await navigator.clipboard.writeText(parts.join('\n\n'));
+      showToast(`Copied ${parts.length} transcript${parts.length !== 1 ? 's' : ''}`);
+    } catch {
+      showToast('Copy failed — check clipboard permissions');
+    }
   }
 
   async function copyAllTimestamped() {
@@ -523,21 +536,41 @@
       }
     }
     if (!parts.length) return;
-    await navigator.clipboard.writeText(parts.join('\n\n'));
-    showToast(`Copied ${parts.length} transcript${parts.length !== 1 ? 's' : ''} with timestamps`);
+    try {
+      await navigator.clipboard.writeText(parts.join('\n\n'));
+      showToast(`Copied ${parts.length} transcript${parts.length !== 1 ? 's' : ''} with timestamps`);
+    } catch {
+      showToast('Copy failed — check clipboard permissions');
+    }
+  }
+
+  // ── Clear done ────────────────────────────────────────────────────────────────
+  function clearDone() {
+    for (const [id, job] of jobs.entries()) {
+      if (job.status === 'done' || job.status === 'error') {
+        if (pollTimers.has(id)) { clearInterval(pollTimers.get(id)); pollTimers.delete(id); }
+        openSegs.delete(id);
+        jobs.delete(id);
+        document.getElementById(`job-${id}`)?.remove();
+      }
+    }
+    updateToolbar();
   }
 
   // ── Toolbar ───────────────────────────────────────────────────────────────────
   function updateToolbar() {
-    const total = jobs.size;
-    const done  = [...jobs.values()].filter(j => j.status === 'done').length;
-    const active = [...jobs.values()].filter(j => j.status === 'queued' || j.status === 'processing').length;
+    const total    = jobs.size;
+    const done     = [...jobs.values()].filter(j => j.status === 'done').length;
+    const errored  = [...jobs.values()].filter(j => j.status === 'error').length;
+    const active   = [...jobs.values()].filter(j => j.status === 'queued' || j.status === 'processing').length;
+    const finished = done + errored;
 
     document.getElementById('jobCount').textContent =
-      total > 0 ? `${total} file${total !== 1 ? 's' : ''} · ${done} done${active > 0 ? ` · ${active} pending` : ''}` : '';
+      total > 0 ? `${total} / 25 · ${done} done${active > 0 ? ` · ${active} pending` : ''}` : '0 / 25 jobs';
 
-    document.getElementById('copyAllBtn').style.display = done > 1 ? 'inline-block' : 'none';
-    document.getElementById('copyAllTsBtn').style.display = done > 1 ? 'inline-block' : 'none';
+    document.getElementById('copyAllBtn').style.display    = done > 1 ? 'inline-block' : 'none';
+    document.getElementById('copyAllTsBtn').style.display  = done > 1 ? 'inline-block' : 'none';
+    document.getElementById('clearDoneBtn').style.display  = finished > 0 ? 'inline-block' : 'none';
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -557,6 +590,8 @@
     const s = Math.floor(sec % 60);
     return m > 0 ? `${m}m ${s}s` : `${s}s`;
   }
+
+  updateToolbar(); // initialise count / button visibility on load
 
   let toastTimer;
   function showToast(msg) {
