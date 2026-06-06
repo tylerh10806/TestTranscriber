@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transcribe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #020617;
+      --surface:  #0F172A;
+      --surface2: #1E293B;
+      --border:   #1E293B;
+      --text:     #F8FAFC;
+      --muted:    #64748B;
+      --green:    #22C55E;
+      --blue:     #3B82F6;
+      --red:      #EF4444;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      padding: 28px 24px 60px;
+      max-width: 820px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 12px;
+      font-family: 'Fira Code', monospace;
+    }
+
+    /* ── Drop zone ── */
+    .dropzone {
+      border: 1.5px dashed var(--border);
+      border-radius: 8px;
+      padding: 36px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 150ms, background 150ms;
+      margin-bottom: 20px;
+      user-select: none;
+    }
+
+    .dropzone:hover,
+    .dropzone.drag-over {
+      border-color: var(--blue);
+      background: rgba(59, 130, 246, 0.04);
+    }
+
+    .dropzone-primary {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .dropzone-secondary {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Fira Code', monospace;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      min-height: 30px;
+    }
+
+    .job-count {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* ── Buttons ── */
+    button {
+      font-family: 'Inter', system-ui, sans-serif;
+      cursor: pointer;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 150ms, color 150ms, opacity 150ms;
+    }
+
+    .btn-primary {
+      background: var(--green);
+      color: #000;
+      padding: 6px 14px;
+    }
+    .btn-primary:hover { background: #16a34a; }
+
+    .btn-ghost {
+      background: var(--surface2);
+      color: var(--muted);
+      padding: 5px 10px;
+    }
+    .btn-ghost:hover { color: var(--text); background: #334155; }
+
+    /* ── Job list ── */
+    .job-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .job-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    /* header row */
+    .job-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+    }
+
+    .job-filename {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* badges */
+    .badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 99px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .badge-queued    { background: var(--surface2); color: var(--muted); }
+    .badge-processing{ background: rgba(59,130,246,.15); color: var(--blue); }
+    .badge-done      { background: rgba(34,197,94,.15);  color: var(--green); }
+    .badge-error     { background: rgba(239,68,68,.15);  color: var(--red); }
+
+    /* progress */
+    .progress-wrap { padding: 0 14px 12px; }
+
+    .progress-bar-bg {
+      background: var(--surface2);
+      border-radius: 3px;
+      height: 3px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--blue);
+      border-radius: 3px;
+      transition: width 400ms ease;
+    }
+
+    .progress-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 5px;
+      font-family: 'Fira Code', monospace;
+    }
+
+    /* transcript */
+    .transcript-section {
+      border-top: 1px solid var(--border);
+      padding: 12px 14px;
+    }
+
+    .transcript-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .job-meta {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: 'Fira Code', monospace;
+    }
+
+    .transcript-text {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+
+    /* segments */
+    .segments-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      padding: 2px 0;
+      margin-top: 12px;
+      transition: color 150ms;
+    }
+    .segments-toggle:hover { color: var(--text); }
+
+    .chevron {
+      transition: transform 200ms;
+      flex-shrink: 0;
+    }
+    .chevron.open { transform: rotate(180deg); }
+
+    .segments-list {
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .segment-row {
+      display: flex;
+      gap: 14px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .segment-time {
+      font-family: 'Fira Code', monospace;
+      color: var(--muted);
+      font-size: 11px;
+      flex-shrink: 0;
+      padding-top: 1px;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .segment-text {
+      color: #CBD5E1;
+    }
+
+    /* error */
+    .job-error {
+      border-top: 1px solid var(--border);
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--red);
+      font-family: 'Fira Code', monospace;
+    }
+
+    /* toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      color: var(--green);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 180ms, transform 180ms;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Transcribe</h1>
+  <span class="subtitle">cpu · whisper-medium · int8</span>
+</header>
+
+<div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Drop audio files or click to browse">
+  <p class="dropzone-primary">Drop audio files here or click to browse</p>
+  <p class="dropzone-secondary">mp3 · m4a · wav · flac · ogg · opus · aac · webm</p>
+  <input type="file" id="fileInput" multiple accept="audio/*,.mp3,.m4a,.wav,.flac,.ogg,.opus,.aac,.webm,.wma" style="display:none" aria-hidden="true">
+</div>
+
+<div class="toolbar">
+  <span class="job-count" id="jobCount" aria-live="polite"></span>
+  <button class="btn-primary" id="copyAllBtn" style="display:none" onclick="copyAll()">Copy all</button>
+</div>
+
+<div class="job-list" id="jobList" aria-label="Transcription jobs"></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  const jobs = new Map();        // id → job object
+  const pollTimers = new Map();  // id → interval handle
+  const openSegs = new Set();    // ids with segments expanded
+
+  // ── Drop zone ────────────────────────────────────────────────────────────────
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', e => { if (!dropzone.contains(e.relatedTarget)) dropzone.classList.remove('drag-over'); });
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    submitFiles(e.dataTransfer.files);
+  });
+
+  fileInput.addEventListener('change', () => { submitFiles(fileInput.files); fileInput.value = ''; });
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
+  async function submitFiles(fileList) {
+    if (!fileList.length) return;
+    const form = new FormData();
+    const arr = Array.from(fileList);
+    arr.forEach(f => form.append('files', f));
+
+    try {
+      const res = await fetch('/transcribe', { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      data.job_ids.forEach((id, i) => {
+        const filename = arr[i]?.name || 'unknown';
+        jobs.set(id, { id, filename, status: 'queued', progress: 0, result: null, error: null });
+        renderJob(id);
+        startPolling(id);
+      });
+
+      updateToolbar();
+    } catch (err) {
+      console.error('Submit failed:', err);
+    }
+  }
+
+  // ── Polling ──────────────────────────────────────────────────────────────────
+  function startPolling(id) {
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/jobs/${id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        jobs.set(id, { ...jobs.get(id), ...data });
+        renderJob(id);
+        updateToolbar();
+
+        if (data.status === 'done' || data.status === 'error') {
+          clearInterval(pollTimers.get(id));
+          pollTimers.delete(id);
+        }
+      } catch { /* network hiccup — try again next tick */ }
+    }, 500);
+
+    pollTimers.set(id, timer);
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+  function renderJob(id) {
+    const job = jobs.get(id);
+    let card = document.getElementById(`job-${id}`);
+
+    if (!card) {
+      card = document.createElement('div');
+      card.id = `job-${id}`;
+      card.className = 'job-card';
+      card.setAttribute('role', 'article');
+      document.getElementById('jobList').prepend(card);
+    }
+
+    const badgeClass = { queued: 'badge-queued', processing: 'badge-processing', done: 'badge-done', error: 'badge-error' }[job.status] || 'badge-queued';
+    const badgeLabel = { queued: 'Queued', processing: 'Processing', done: 'Done', error: 'Error' }[job.status] || job.status;
+
+    let html = `
+      <div class="job-header">
+        <span class="job-filename" title="${esc(job.filename)}">${esc(job.filename)}</span>
+        <span class="badge ${badgeClass}" aria-label="Status: ${badgeLabel}">${badgeLabel}</span>
+        ${job.status === 'done' ? `<button class="btn-ghost" onclick="copyTranscript('${id}')" aria-label="Copy transcript for ${esc(job.filename)}">Copy</button>` : ''}
+      </div>`;
+
+    if (job.status === 'processing') {
+      html += `
+        <div class="progress-wrap" role="progressbar" aria-valuenow="${job.progress}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" style="width:${job.progress}%"></div>
+          </div>
+          <div class="progress-label">${job.progress}%</div>
+        </div>`;
+    }
+
+    if (job.status === 'done' && job.result) {
+      const isOpen = openSegs.has(id);
+      html += `
+        <div class="transcript-section">
+          <div class="transcript-meta-row">
+            <span class="section-label">Transcript</span>
+            <span class="job-meta">${fmtDuration(job.result.duration)}${job.result.language ? ' · ' + job.result.language.toUpperCase() : ''}</span>
+          </div>
+          <div class="transcript-text">${esc(job.result.transcript)}</div>
+          ${job.result.segments?.length ? `
+            <button class="segments-toggle" onclick="toggleSegs('${id}')" aria-expanded="${isOpen}" aria-controls="segs-${id}">
+              <svg class="chevron${isOpen ? ' open' : ''}" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              ${job.result.segments.length} segments
+            </button>
+            <div id="segs-${id}" class="segments-list" style="display:${isOpen ? 'flex' : 'none'}">
+              ${job.result.segments.map(s => `
+                <div class="segment-row">
+                  <span class="segment-time">${fmtTime(s.start)} → ${fmtTime(s.end)}</span>
+                  <span class="segment-text">${esc(s.text)}</span>
+                </div>`).join('')}
+            </div>` : ''}
+        </div>`;
+    }
+
+    if (job.status === 'error') {
+      html += `<div class="job-error" role="alert">${esc(job.error || 'Transcription failed')}</div>`;
+    }
+
+    card.innerHTML = html;
+  }
+
+  function toggleSegs(id) {
+    const el = document.getElementById(`segs-${id}`);
+    if (!el) return;
+    const isOpen = el.style.display !== 'none';
+    if (isOpen) { openSegs.delete(id); el.style.display = 'none'; }
+    else         { openSegs.add(id);    el.style.display = 'flex'; }
+    // sync chevron and aria state without full re-render
+    const card = document.getElementById(`job-${id}`);
+    const chevron = card?.querySelector('.chevron');
+    const btn = card?.querySelector('.segments-toggle');
+    if (chevron) chevron.classList.toggle('open', !isOpen);
+    if (btn) btn.setAttribute('aria-expanded', String(!isOpen));
+  }
+
+  // ── Copy ─────────────────────────────────────────────────────────────────────
+  async function copyTranscript(id) {
+    const job = jobs.get(id);
+    if (!job?.result?.transcript) return;
+    await navigator.clipboard.writeText(job.result.transcript);
+    showToast('Copied');
+  }
+
+  async function copyAll() {
+    const parts = [];
+    for (const job of jobs.values()) {
+      if (job.status === 'done' && job.result?.transcript) {
+        parts.push(`=== ${job.filename} ===\n${job.result.transcript}`);
+      }
+    }
+    if (!parts.length) return;
+    await navigator.clipboard.writeText(parts.join('\n\n'));
+    showToast(`Copied ${parts.length} transcript${parts.length !== 1 ? 's' : ''}`);
+  }
+
+  // ── Toolbar ───────────────────────────────────────────────────────────────────
+  function updateToolbar() {
+    const total = jobs.size;
+    const done  = [...jobs.values()].filter(j => j.status === 'done').length;
+    const active = [...jobs.values()].filter(j => j.status === 'queued' || j.status === 'processing').length;
+
+    document.getElementById('jobCount').textContent =
+      total > 0 ? `${total} file${total !== 1 ? 's' : ''} · ${done} done${active > 0 ? ` · ${active} pending` : ''}` : '';
+
+    document.getElementById('copyAllBtn').style.display = done > 1 ? 'inline-block' : 'none';
+  }
+
+  // ── Utilities ─────────────────────────────────────────────────────────────────
+  function esc(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtTime(sec) {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function fmtDuration(sec) {
+    if (!sec) return '';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  let toastTimer;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+</script>
+</body>
+</html>
